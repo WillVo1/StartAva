@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nurse Ava</title>
+    <style>
+        body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f0f0; }
+        #container { text-align: center; cursor: pointer; }
+        #status { margin: 20px; font-size: 18px; }
+        #circle { width: 150px; height: 150px; border-radius: 50%; background: #007bff; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; transition: background 0.3s; }
+        #circle.listening { background: #dc3545; animation: pulse 1.5s infinite; }
+        #circle.speaking { background: #28a745; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>🩺 Nurse Ava</h1>
+        <div id="circle">Click</div>
+        <div id="status">Click to start</div>
+    </div>
+    <script>
+        const ws = new WebSocket('ws://localhost:3000');
+        const status = document.getElementById('status');
+        const circle = document.getElementById('circle');
+        const container = document.getElementById('container');
+        let audioContext, stream, processor, isListening = false, silenceTimeout;
+        let retryCount = 0, maxRetries = 3;
+
+        container.onclick = async () => {
+            if (isListening) {
+                isListening = false;
+                clearTimeout(silenceTimeout);
+                ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+                ws.send(JSON.stringify({ type: 'response.create' }));
+                circle.classList.remove('listening');
+                circle.textContent = '...';
+                status.textContent = 'Processing...';
+                return;
+            }
+            
+            if (!audioContext) {
+                audioContext = new AudioContext({ sampleRate: 24000 });
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioContext.createMediaStreamSource(stream);
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isListening) return;
+                    const pcm = e.inputBuffer.getChannelData(0);
+                    const int16 = new Int16Array(pcm.length);
+                    let hasSound = false;
+                    
+                    for (let i = 0; i < pcm.length; i++) {
+                        int16[i] = Math.max(-32768, Math.min(32767, pcm[i] * 32768));
+                        if (Math.abs(pcm[i]) > 0.01) hasSound = true;
+                    }
+                    
+                    ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: btoa(String.fromCharCode(...new Uint8Array(int16.buffer))) }));
+                    
+                    if (hasSound) {
+                        clearTimeout(silenceTimeout);
+                        silenceTimeout = setTimeout(() => {
+                            isListening = false;
+                            ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+                            ws.send(JSON.stringify({ type: 'response.create' }));
+                            circle.classList.remove('listening');
+                            circle.textContent = '...';
+                            status.textContent = 'Processing...';
+                        }, 1500);
+                    }
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+            }
+            
+            isListening = true;
+            circle.classList.add('listening');
+            circle.textContent = '🎤';
+            status.textContent = 'Listening... (click to stop)';
+        };
+
+        ws.onmessage = async (e) => {
+            const data = typeof e.data === 'string' ? e.data : await e.data.text();
+            const event = JSON.parse(data);
+            console.log('Received:', event.type);
+            
+            if (event.type === 'error') {
+                console.error('Error:', event.error);
+                if (event.error?.type === 'server_error' && retryCount < maxRetries) {
+                    retryCount++;
+                    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 8000);
+                    status.textContent = `Server error. Retry ${retryCount}/${maxRetries} in ${delay/1000}s...`;
+                    setTimeout(() => {
+                        ws.send(JSON.stringify({ type: 'response.create' }));
+                    }, delay);
+                } else {
+                    status.textContent = retryCount >= maxRetries ? 'Max retries reached. Click to try again.' : 'Error: ' + (event.error?.message || 'Unknown error');
+                    circle.classList.remove('listening', 'speaking');
+                    circle.textContent = 'Click';
+                    retryCount = 0;
+                }
+                return;
+            }
+            
+            if (event.type === 'response.audio.delta') {
+                const binary = atob(event.delta);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const int16 = new Int16Array(bytes.buffer);
+                const float32 = new Float32Array(int16.length);
+                for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+                const buffer = audioContext.createBuffer(1, float32.length, 24000);
+                buffer.getChannelData(0).set(float32);
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start();
+                circle.classList.remove('listening');
+                circle.classList.add('speaking');
+                circle.textContent = '🔊';
+                status.textContent = 'Speaking...';
+            }
+            if (event.type === 'response.done') {
+                circle.classList.remove('speaking');
+                circle.textContent = 'Click';
+                status.textContent = 'Click to speak';
+                retryCount = 0;
+                if (audioContext) {
+                    audioContext.close();
+                    audioContext = null;
+                }
+            }
+        };
+    </script>
+</body>
+</html>

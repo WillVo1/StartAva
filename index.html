@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Chat</title>
+    <style>
+        body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f0f0; }
+        button { padding: 20px 40px; font-size: 20px; cursor: pointer; border: none; border-radius: 8px; background: #007bff; color: white; }
+        button:hover { background: #0056b3; }
+        button.active { background: #dc3545; }
+    </style>
+</head>
+<body>
+    <button id="voiceBtn">Start Voice Chat</button>
+    <script>
+        const btn = document.getElementById('voiceBtn');
+        let pc, dataChannel, audioContext, mcpTools;
+
+        // Fetch MCP tools on page load
+        fetch('/api/mcp-tools').then(r => r.json()).then(tools => mcpTools = tools);
+
+        btn.onclick = async () => {
+            if (pc) {
+                pc.close();
+                pc = null;
+                btn.textContent = 'Start Voice Chat';
+                btn.classList.remove('active');
+                return;
+            }
+
+            const { key } = await fetch('/api/key').then(r => r.json());
+            const token = await fetch('https://api.openai.com/v1/realtime/sessions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    model: 'gpt-4o-realtime-preview-2024-12-17', 
+                    voice: 'sage'
+                })
+            }).then(r => r.json());
+
+            pc = new RTCPeerConnection();
+            audioContext = new AudioContext({ sampleRate: 24000 });
+
+            const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+            pc.addTrack(ms.getTracks()[0]);
+
+            pc.ontrack = e => {
+                const audio = new Audio();
+                audio.srcObject = e.streams[0];
+                audio.play();
+            };
+
+            dataChannel = pc.createDataChannel('oai-events');
+            dataChannel.onopen = () => {
+                console.log('Data channel open, sending tools:', mcpTools);
+                dataChannel.send(JSON.stringify({
+                    type: 'session.update',
+                    session: {
+                        instructions: `You are Nurse Ava, a helpful medical assistant. Be EXTREMELY human, concise, and AVOID BEING ROBOTIC in all responses.
+
+When you first greet the patient, introduce yourself and mention:
+- Patient name: John
+- Their condition: DKA, Transfer
+- What you can help with: answering questions about their treatment, providing medical advice, and comfort
+
+Current patient: John (Subject ID: 10023239, Stay ID: 39348852).
+
+Vitals:
+- Temperature: 97.8°F
+- Heart Rate: 115 bpm
+- Respiratory Rate: 20
+- O2 Saturation: 99%
+- Blood Pressure: 92/42 mmHg
+- Pain Level: 0/10
+- Acuity Level: 2
+
+Chief Complaint: DKA, Transfer.
+
+Instructions:
+- When patient reports emergencies, use notify_nurse_emergency tool with +18047297894
+- Use ehrRetrievalTool when user asks for updates on their treatment
+- Use medicalBookRAGTool for general medical advice or insight into medical conditions and what can happen`,
+                        tools: mcpTools
+                    }
+                }));
+            };
+            dataChannel.onmessage = async e => {
+                const event = JSON.parse(e.data);
+                console.log('Event:', event.type, event);
+                if (event.type === 'response.function_call_arguments.done') {
+                    console.log('Function call:', event.name, event.arguments);
+                    const result = await fetch('/api/mcp-call', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: event.name, arguments: JSON.parse(event.arguments) })
+                    }).then(r => r.json());
+                    console.log('MCP result:', result);
+                    dataChannel.send(JSON.stringify({
+                        type: 'conversation.item.create',
+                        item: {
+                            type: 'function_call_output',
+                            call_id: event.call_id,
+                            output: JSON.stringify(result)
+                        }
+                    }));
+                    dataChannel.send(JSON.stringify({ type: 'response.create' }));
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const answer = await fetch(`https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token.client_secret.value}`,
+                    'Content-Type': 'application/sdp'
+                },
+                body: offer.sdp
+            }).then(r => r.text());
+
+            await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+
+            btn.textContent = 'Stop Voice Chat';
+            btn.classList.add('active');
+        };
+    </script>
+</body>
+</html>
