@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Chat - Nurse Ava</title>
-    <link rel="icon" href="https://fav.farm/🦦">
+    <link rel="icon" href="nurseavalogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
 
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -42,7 +42,7 @@
 
     /** --- COMPONENT: PulseOrb --- */
     const PulseOrb = ({ isActive, isSpeaking, micLevel }) => {
-        const avaImage = "nurseavalogo.png";
+        const avaImage = "nurseava.png";
         const dynamicScale = isActive ? 1.25 + (micLevel / 400) : 1;
         const dynamicOpacity = isActive ? 0.3 + (micLevel / 500) : 0.05;
 
@@ -277,7 +277,7 @@ Instructions:
 
                 <footer className="mt-8 flex flex-col items-center gap-6 pb-6">
                     <button onClick={() => setShowChat(true)} className="flex items-center gap-2 text-sm font-bold text-emerald-600 hover:text-emerald-800 transition-colors">
-                        <MessageSquareIcon size={16} /> Switch to text logs
+                        <MessageSquareIcon size={16} /> Switch to text
                     </button>
                     <div className="flex gap-10 text-slate-300">
                         <SettingsIcon size={22} className="hover:text-emerald-500 cursor-pointer transition-colors" />
