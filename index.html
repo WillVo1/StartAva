@@ -1,73 +1,175 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Voice Chat</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Chat - Nurse Ava</title>
+    <link rel="icon" href="https://fav.farm/🦦">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        body { font-family: Arial; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f0f0; }
-        button { padding: 20px 40px; font-size: 20px; cursor: pointer; border: none; border-radius: 8px; background: #007bff; color: white; }
-        button:hover { background: #0056b3; }
-        button.active { background: #dc3545; }
+        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #F7F9F8; }
     </style>
 </head>
 <body>
-    <button id="voiceBtn">Start Voice Chat</button>
-    <script>
-        const btn = document.getElementById('voiceBtn');
-        let pc, dataChannel, audioContext, mcpTools;
+<div id="root"></div>
 
-        // Fetch MCP tools on page load
-        fetch('/api/mcp-tools').then(r => r.json()).then(tools => mcpTools = tools);
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-        btn.onclick = async () => {
-            if (pc) {
-                pc.close();
-                pc = null;
-                btn.textContent = 'Start Voice Chat';
-                btn.classList.remove('active');
-                return;
+    /** --- ICONS (Replacing lucide-react for standalone HTML) --- */
+    const Icon = ({ children, size = 24, className = "" }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+            {children}
+        </svg>
+    );
+    const MicIcon = ({ size, className }) => <Icon size={size} className={className}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></Icon>;
+    const SquareIcon = ({ size, className, fill }) => <Icon size={size} className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2" fill={fill || "none"}/></Icon>;
+    const PhoneCallIcon = ({ size, className }) => <Icon size={size} className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/><path d="M14.05 2a9 9 0 0 1 8 7.94"/><path d="M14.05 6A5 5 0 0 1 18 10"/></Icon>;
+    const ActivityIcon = ({ size, className }) => <Icon size={size} className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></Icon>;
+    const HeartIcon = ({ size, className, fill }) => <Icon size={size} className={className}><path fill={fill || "none"} d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></Icon>;
+    const MessageSquareIcon = ({ size, className }) => <Icon size={size} className={className}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icon>;
+    const SettingsIcon = ({ size, className }) => <Icon size={size} className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></Icon>;
+    const Volume2Icon = ({ size, className }) => <Icon size={size} className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></Icon>;
+
+    /** --- CONFIGURATION --- */
+    const MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+
+    /** --- COMPONENT: PulseOrb --- */
+    const PulseOrb = ({ isActive, isSpeaking, micLevel }) => {
+        const avaImage = "nurseavalogo.png";
+        const dynamicScale = isActive ? 1.25 + (micLevel / 400) : 1;
+        const dynamicOpacity = isActive ? 0.3 + (micLevel / 500) : 0.05;
+
+        return (
+            <div className="relative flex items-center justify-center my-10">
+                <div
+                    className={`absolute w-72 h-72 rounded-full blur-3xl transition-all duration-75 ${isSpeaking ? 'bg-blue-400' : 'bg-emerald-400'}`}
+                    style={{ transform: `scale(${dynamicScale})`, opacity: dynamicOpacity }}
+                />
+
+                <div className={`relative w-48 h-48 rounded-full border-4 border-white shadow-2xl overflow-hidden z-10 transition-transform duration-500 ${isSpeaking ? 'scale-105 border-emerald-100' : 'scale-100'}`}>
+                    <img src={avaImage} className="w-full h-full object-cover scale-110" alt="Nurse Ava" />
+
+                    {(isActive) && (
+                        <div className="absolute inset-0 bg-emerald-900/40 flex items-center justify-center backdrop-blur-[2px] transition-all">
+                            <div className="flex gap-1.5 items-end h-10">
+                                {[1, 1.5, 2, 1.5, 1].map((multiplier, i) => (
+                                    <div
+                                        key={i}
+                                        className="w-1.5 bg-white rounded-full transition-all duration-75"
+                                        style={{ height: `${Math.max(4, (micLevel / 3) * multiplier)}px`, opacity: 0.8 + (micLevel / 500) }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="absolute w-80 h-80 border border-emerald-200/30 rounded-full border-dashed animate-[spin_20s_linear_infinite]" />
+            </div>
+        );
+    };
+
+    /** --- MAIN APP COMPONENT --- */
+    function NurseAvaApp() {
+        const [messages, setMessages] = useState([]);
+        const [showChat, setShowChat] = useState(false);
+        const [isEmergency, setIsEmergency] = useState(false);
+        const [status, setStatus] = useState("Ready for Check-in");
+        const [isConnected, setIsConnected] = useState(false);
+        const [micLevel, setMicLevel] = useState(0);
+
+        const pcRef = useRef(null);
+        const dcRef = useRef(null);
+        const mcpToolsRef = useRef([]);
+        const audioCtxRef = useRef(null);
+        const analyserRef = useRef(null);
+        const animationFrameRef = useRef(null);
+
+        useEffect(() => {
+            fetch('/api/mcp-tools')
+                .then(r => r.json())
+                .then(tools => { mcpToolsRef.current = tools; })
+                .catch(e => console.warn("Could not load MCP tools. Make sure your local server is running.", e));
+        }, []);
+
+        const updateMicLevel = () => {
+            if (!analyserRef.current) return;
+            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+            analyserRef.current.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+            setMicLevel(average);
+            animationFrameRef.current = requestAnimationFrame(updateMicLevel);
+        };
+
+        const stopSession = () => {
+            if (pcRef.current) {
+                pcRef.current.close();
+                pcRef.current = null;
             }
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            if (audioCtxRef.current) {
+                audioCtxRef.current.close();
+                audioCtxRef.current = null;
+            }
+            setMicLevel(0);
+            setIsConnected(false);
+            setStatus("Session Ended");
+        };
 
-            const { key } = await fetch('/api/key').then(r => r.json());
-            const token = await fetch('https://api.openai.com/v1/realtime/sessions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${key}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    model: 'gpt-4o-realtime-preview-2024-12-17', 
-                    voice: 'sage'
-                })
-            }).then(r => r.json());
+        const startSession = async () => {
+            try {
+                setStatus("Connecting...");
+                const { key } = await fetch('/api/key').then(r => r.json());
 
-            pc = new RTCPeerConnection();
-            audioContext = new AudioContext({ sampleRate: 24000 });
+                const tokenRes = await fetch('https://api.openai.com/v1/realtime/sessions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: MODEL, voice: 'sage' })
+                }).then(r => r.json());
 
-            const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-            pc.addTrack(ms.getTracks()[0]);
+                const pc = new RTCPeerConnection();
+                pcRef.current = pc;
 
-            pc.ontrack = e => {
-                const audio = new Audio();
-                audio.srcObject = e.streams[0];
-                audio.play();
-            };
+                pc.ontrack = e => {
+                    const audio = new Audio();
+                    audio.srcObject = e.streams[0];
+                    audio.play();
+                    setStatus("Nurse Ava is Active");
+                };
 
-            dataChannel = pc.createDataChannel('oai-events');
-            dataChannel.onopen = () => {
-                console.log('Data channel open, sending tools:', mcpTools);
-                dataChannel.send(JSON.stringify({
-                    type: 'session.update',
-                    session: {
-                        instructions: `You are Nurse Ava, a helpful medical assistant. Be EXTREMELY human, concise, and AVOID BEING ROBOTIC in all responses.
+                const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+                pc.addTrack(ms.getTracks()[0]);
 
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                audioCtxRef.current = audioCtx;
+                const analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                analyserRef.current = analyser;
+
+                const source = audioCtx.createMediaStreamSource(ms);
+                source.connect(analyser);
+                updateMicLevel();
+
+                const dc = pc.createDataChannel('oai-events');
+                dcRef.current = dc;
+
+                dc.onopen = () => {
+                    setIsConnected(true);
+                    dc.send(JSON.stringify({
+                        type: 'session.update',
+                        session: {
+                            instructions: `You are Nurse Ava, a helpful medical assistant. Be EXTREMELY human, concise, and AVOID BEING ROBOTIC in all responses.
 When you first greet the patient say this -> Hey, I know it’s been 45 minutes, how are you feeling? Did your stomach pain get better?
-
 If patient ask about results/what stage they are on. STRICTLY only use what is given from ehrRetrievaltool
-
 Patients ONLY AFTER can be seen after 1-2 hours (ONLY GIVE UNTIL USER ASK)
 Current patient: John (Subject ID: 10023239, Stay ID: 39348852).
 Injury: stomach Injury
-
 Vitals:
 - Temperature: 97.8°F
 - Heart Rate: 115 bpm
@@ -76,57 +178,125 @@ Vitals:
 - Blood Pressure: 92/42 mmHg
 - Pain Level: 0/10
 - Acuity Level: 2
-
 Chief Complaint: stomach Pain.
-
 Instructions:
 - When patient reports emergencies, use notify_nurse_emergency tool with +18047297894
 - Use ehrRetrievalTool when user asks for updates on their treatment
-- Use medicalBookRAGTool for general medical advice or insight into medical conditions and what can happen`,
-                        tools: mcpTools
-                    }
-                }));
-            };
-            dataChannel.onmessage = async e => {
-                const event = JSON.parse(e.data);
-                console.log('Event:', event.type, event);
-                if (event.type === 'response.function_call_arguments.done') {
-                    console.log('Function call:', event.name, event.arguments);
-                    const result = await fetch('/api/mcp-call', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: event.name, arguments: JSON.parse(event.arguments) })
-                    }).then(r => r.json());
-                    console.log('MCP result:', result);
-                    dataChannel.send(JSON.stringify({
-                        type: 'conversation.item.create',
-                        item: {
-                            type: 'function_call_output',
-                            call_id: event.call_id,
-                            output: JSON.stringify(result)
+- Use medicalBookRAGTool for general medical advice.`,
+                            tools: mcpToolsRef.current
                         }
                     }));
-                    dataChannel.send(JSON.stringify({ type: 'response.create' }));
-                }
-            };
+                };
 
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
+                dc.onmessage = async (e) => {
+                    const event = JSON.parse(e.data);
 
-            const answer = await fetch(`https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token.client_secret.value}`,
-                    'Content-Type': 'application/sdp'
-                },
-                body: offer.sdp
-            }).then(r => r.text());
+                    if (event.type === 'response.function_call_arguments.done') {
+                        console.log('Function call:', event.name, event.arguments);
+                        if (event.name === 'notify_nurse_emergency') setIsEmergency(true);
 
-            await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+                        const result = await fetch('/api/mcp-call', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: event.name, arguments: JSON.parse(event.arguments) })
+                        }).then(r => r.json());
 
-            btn.textContent = 'Stop Voice Chat';
-            btn.classList.add('active');
+                        dc.send(JSON.stringify({
+                            type: 'conversation.item.create',
+                            item: { type: 'function_call_output', call_id: event.call_id, output: JSON.stringify(result) }
+                        }));
+                        dc.send(JSON.stringify({ type: 'response.create' }));
+                    }
+
+                    if (event.type === 'response.audio_transcript.done') {
+                        setMessages(prev => [...prev, { role: 'bot', text: event.transcript }]);
+                    }
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                const answerSdp = await fetch(`https://api.openai.com/v1/realtime?model=${MODEL}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${tokenRes.client_secret.value}`,
+                        'Content-Type': 'application/sdp'
+                    },
+                    body: offer.sdp
+                }).then(r => r.text());
+
+                await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+            } catch (err) {
+                console.error(err);
+                setStatus("Connection Error. Check console.");
+                stopSession();
+            }
         };
-    </script>
+
+        if (isEmergency) {
+            return (
+                <div className="fixed inset-0 bg-red-600 flex flex-col items-center justify-center text-white p-12 text-center z-[100]">
+                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-bounce">
+                        <PhoneCallIcon size={40} />
+                    </div>
+                    <h1 className="text-5xl font-black mb-4 uppercase tracking-tighter">Help is Coming</h1>
+                    <p className="text-xl opacity-90 mb-10 max-w-md">The emergency alert has been sent. A nurse is reviewing your history now.</p>
+                    <button onClick={() => window.location.reload()} className="bg-white text-red-600 px-10 py-4 rounded-full font-bold shadow-xl">DISMISS ALERT</button>
+                </div>
+            );
+        }
+
+        return (
+            <div className="min-h-screen bg-[#F7F9F8] flex flex-col items-center p-8 text-slate-900">
+                <header className="flex flex-col items-center gap-2 mt-6 mb-2">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
+                        <ActivityIcon size={12} className="animate-pulse" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest italic flex items-center gap-1">
+                                <HeartIcon size={10} fill="currentColor" /> Ava Online
+                            </span>
+                    </div>
+                    <h1 className="text-4xl font-black tracking-tight text-slate-900">Nurse Ava</h1>
+                    <p className={`text-sm font-medium transition-colors duration-300 ${isConnected ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {status}
+                    </p>
+                </header>
+
+                <main className="flex-1 flex flex-col items-center justify-center w-full">
+                    <PulseOrb isActive={isConnected} isSpeaking={false} micLevel={micLevel} />
+
+                    <div className="mt-8 w-full max-w-sm px-4">
+                        <button
+                            onClick={isConnected ? stopSession : startSession}
+                            className={`w-full flex items-center justify-between gap-4 px-8 py-5 rounded-3xl shadow-xl transition-all active:scale-[0.98] border-2
+                                ${isConnected ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-slate-100 text-slate-800 shadow-emerald-900/5 hover:border-emerald-200'}`}
+                        >
+                            <div className="flex flex-col items-start text-left">
+                                <span className="font-extrabold text-lg leading-tight">{isConnected ? "Stop Chat" : "Start Check-in"}</span>
+                                <span className="text-[10px] uppercase opacity-50 tracking-widest font-bold">{isConnected ? "Live Now" : "Voice Active"}</span>
+                            </div>
+                            <div className={`p-4 rounded-2xl ${isConnected ? 'bg-red-600' : 'bg-emerald-600'} text-white shadow-lg`}>
+                                {isConnected ? <SquareIcon size={20} fill="currentColor" /> : <MicIcon size={20} />}
+                            </div>
+                        </button>
+                    </div>
+                </main>
+
+                <footer className="mt-8 flex flex-col items-center gap-6 pb-6">
+                    <button onClick={() => setShowChat(true)} className="flex items-center gap-2 text-sm font-bold text-emerald-600 hover:text-emerald-800 transition-colors">
+                        <MessageSquareIcon size={16} /> Switch to text logs
+                    </button>
+                    <div className="flex gap-10 text-slate-300">
+                        <SettingsIcon size={22} className="hover:text-emerald-500 cursor-pointer transition-colors" />
+                        <Volume2Icon size={22} className="hover:text-emerald-500 cursor-pointer transition-colors" />
+                    </div>
+                </footer>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<NurseAvaApp />);
+</script>
 </body>
 </html>
