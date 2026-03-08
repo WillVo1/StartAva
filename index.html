@@ -42,7 +42,7 @@
 
     /** --- COMPONENT: PulseOrb --- */
     const PulseOrb = ({ isActive, isSpeaking, micLevel }) => {
-        const avaImage = "https://m.media-amazon.com/images/I/61eRWnnS0zL._AC_UF894,1000_QL80_.jpg";
+        const avaImage = "nurseavalogo.png";
         const dynamicScale = isActive ? 1.25 + (micLevel / 400) : 1;
         const dynamicOpacity = isActive ? 0.3 + (micLevel / 500) : 0.05;
 
@@ -253,7 +253,7 @@ Instructions:
                     <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
                         <ActivityIcon size={12} className="animate-pulse" />
                         <span className="text-[10px] font-bold uppercase tracking-widest italic flex items-center gap-1">
-                                <HeartIcon size={10} fill="currentColor" /> Care-bara Online
+                                <HeartIcon size={10} fill="currentColor" /> Ava Online
                             </span>
                     </div>
                     <h1 className="text-4xl font-black tracking-tight text-slate-900">Nurse Ava</h1>
